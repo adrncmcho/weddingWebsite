@@ -1,35 +1,31 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from dotenv import load_dotenv
-import os
+# FastAPI imports
+from fastapi import FastAPI, UploadFile, File, Header, HTTPException
 
-from app.api import routes_photos, routes_users
+# Firebase Admin
+import firebase_admin
+from firebase_admin import credentials, auth
 
-# Load environment variables from .env
-load_dotenv()
+# Your service modules
+# Relative import
+from services.firestore_service import log_upload
+from services.storage_service import upload_file
 
-app = FastAPI(
-    title="Photo Upload API",
-    version="1.0.0"
-)
+app = FastAPI()
 
-# Include your routers
-app.include_router(routes_photos.router, prefix="/photos", tags=["Photos"])
-app.include_router(routes_users.router, prefix="/users", tags=["Users"])
+@app.post("/upload")
+async def upload_endpoint(file: UploadFile = File(...), authorization: str = Header(...)):
+    # Verify Firebase token
+    id_token = authorization.split(" ")[1]
+    decoded_token = auth.verify_id_token(id_token)
+    user_id = decoded_token["uid"]
 
-# Mount static files folder
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+    # Read file contents
+    contents = await file.read()
 
-# Serve favicon to prevent 404s
-@app.get("/favicon.ico", include_in_schema=False)
-def favicon():
-    return FileResponse("app/static/favicon.ico")
+    # Upload file
+    file_url = upload_file(user_id, file.filename, contents, file.content_type)
 
-# Health check route
-@app.get("/")
-def health_check():
-    return {
-        "status": "okay",
-        "bucket": os.getenv("FIREBASE_STORAGE_BUCKET")
-    }
+    # Log metadata in Firestore
+    log_upload(user_id, file.filename, file_url)
+
+    return {"file_url": file_url}
