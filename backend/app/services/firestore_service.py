@@ -1,12 +1,11 @@
-import firebase_admin
-from firebase_admin import credentials, firestore, storage 
-import os 
-
-if not firebase_admin._apps:
-    cred = credentials.ApplicationDefault()
-    firebase_admin.initlialize_app(cred, {
-        "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET")
-    })
+from firebase_admin import firestore
 
 db = firestore.client()
-bucket = storage.bucket()
+
+def log_upload(user_id, file_name, file_url):
+    db.collection("uploads").add({
+        "userId": user_id,
+        "fileName": file_name,
+        "fileUrl": file_url,
+        "uploadedAt": firestore.SERVER_TIMESTAMP
+    })
